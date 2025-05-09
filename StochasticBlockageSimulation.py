@@ -103,10 +103,9 @@ for i in range(len(blue_data_flat)):
         plot_colors.append("red")
         plot_pos.append(x_positions[2 * i + 1])
 
-# Create the plot
+# === Plot 0: Boxplot ===
 plt.figure(figsize=(14, 6))
 box = plt.boxplot(plot_data, positions=plot_pos, widths=0.25, patch_artist=True)
-
 for patch, color in zip(box['boxes'], plot_colors):
     patch.set_facecolor(color)
     patch.set_alpha(0.5)
@@ -125,17 +124,15 @@ plt.legend(handles=[
 ])
 
 plt.tight_layout()
-plt.show()
 plt.savefig('boxplot.png', dpi=300)
+plt.show()
 
+# === Common DataFrame for all other plots ===
 plot_records = []
-
-base_pos = 0
 for alpha in alphas:
     if alpha == 1:
         continue
     ratio = round(alpha / (1 - alpha), 2)
-
     df = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, red=red, seed=42)
     df = df[df["BlockageOccurred"]]
     for _, row in df.iterrows():
@@ -145,12 +142,50 @@ for alpha in alphas:
             "BlockedLane": "Short" if row["BlockedLane"] == "short" else "Through"
         })
 
-# Convert to dataframe
 df_plot = pd.DataFrame(plot_records)
+
+fig, ax = plt.subplots(figsize=(16, 6))
+
+unique_ratios = sorted(df_plot["AlphaRatio"].unique())
+positions = []
+data = []
+colors = []
+
+for i, ratio in enumerate(unique_ratios):
+    for j, lane in enumerate(["short", "through"]):
+        values = df_plot[(df_plot["AlphaRatio"] == ratio) & (df_plot["BlockedLane"] == lane)]["QueueRatio"].values
+        if len(values) > 0:
+            data.append(values)
+            positions.append(i + (j - 0.5) * 0.2)
+            colors.append("blue" if lane == "short" else "red")
+
+box = ax.boxplot(data, positions=positions, widths=0.15, patch_artist=True)
+
+for patch, color in zip(box['boxes'], colors):
+    patch.set_facecolor(color)
+    patch.set_alpha(0.5)
+
+ax.axhline(1, linestyle='--', color='gray')
+ax.set_title('Queue Ratio by Blocked Lane Type for Each Lane Usage Ratio')
+ax.set_xlabel(r"$\alpha / (1 - \alpha)$")
+ax.set_ylabel("Queue in Blocked Lane / N")
+ax.set_xticks(range(len(unique_ratios)))
+ax.set_xticklabels([f"{r:.2f}" for r in unique_ratios], rotation=45)
+
+ax.legend(handles=[
+    plt.Line2D([0], [0], color='blue', lw=6, label='Short Lane Blocked', alpha=0.5),
+    plt.Line2D([0], [0], color='red', lw=6, label='Through Lane Blocked', alpha=0.5)
+])
+
+plt.grid(True, linestyle="--", axis="y", linewidth=0.5)
+plt.tight_layout()
+plt.show()
+plt.savefig('boxplot.png')
 
 # === Plot 1: Violin Plot ===
 plt.figure(figsize=(14, 6))
-sns.violinplot(data=df_plot, x="AlphaRatio", y="QueueRatio", hue="BlockedLane", split=True, palette={"Short": "blue", "Through": "red"}, cut=0)
+sns.violinplot(data=df_plot, x="AlphaRatio", y="QueueRatio", hue="BlockedLane", split=True,
+               palette={"Short": "blue", "Through": "red"}, cut=0)
 plt.axhline(1, linestyle="--", color="gray")
 plt.title("Violin Plot: Queue Ratio by Lane and Usage Ratio")
 plt.xlabel(r"$\alpha / (1 - \alpha)$")
@@ -158,13 +193,14 @@ plt.ylabel("Queue in Blocked Lane / N")
 plt.legend(title="Blocked Lane")
 plt.xticks(rotation=45)
 plt.tight_layout()
+plt.savefig('violin.png', dpi=300)
 plt.show()
-plt.savefig('Violin.png')
 
 # === Plot 2: Line Plot of Mean Values ===
 plt.figure(figsize=(14, 6))
 mean_df = df_plot.groupby(["AlphaRatio", "BlockedLane"])["QueueRatio"].mean().reset_index()
-sns.lineplot(data=mean_df, x="AlphaRatio", y="QueueRatio", hue="BlockedLane", marker="o", palette={"Short": "blue", "Through": "red"})
+sns.lineplot(data=mean_df, x="AlphaRatio", y="QueueRatio", hue="BlockedLane", marker="o",
+             palette={"Short": "blue", "Through": "red"})
 plt.axhline(1, linestyle="--", color="gray")
 plt.title("Mean Queue Ratio vs. Alpha Ratio by Blocked Lane")
 plt.xlabel(r"$\alpha / (1 - \alpha)$")
@@ -173,16 +209,37 @@ plt.legend(title="Blocked Lane")
 plt.xticks(rotation=45)
 plt.grid(True)
 plt.tight_layout()
+plt.savefig('lineplot.png', dpi=300)
 plt.show()
-plt.savefig('LinePlot.png')
 
-# === Plot 3: Histogram of Queue Ratios (all data) ===
+# === Plot 3: Histogram ===
 plt.figure(figsize=(10, 5))
-sns.histplot(data=df_plot, x="QueueRatio", hue="BlockedLane", element="step", stat="density", common_norm=False, palette={"Short": "blue", "Through": "red"})
+sns.histplot(data=df_plot, x="QueueRatio", hue="BlockedLane", element="step", stat="density",
+             common_norm=False, palette={"Short": "blue", "Through": "red"})
 plt.title("Histogram of Queue Ratios in Blocked Lane")
 plt.xlabel("Queue in Blocked Lane / N")
 plt.ylabel("Density")
 plt.grid(True)
 plt.tight_layout()
+plt.savefig('histogram.png', dpi=300)
 plt.show()
-plt.savefig('Histogram.png')
+
+# === Plot 4: Stacked Bar Plot for Frequency ===
+blockage_counts = df_plot.groupby(["AlphaRatio", "BlockedLane"]).size().reset_index(name="Count")
+total_counts = df_plot.groupby("AlphaRatio").size().reset_index(name="Total")
+merged = pd.merge(blockage_counts, total_counts, on="AlphaRatio")
+merged["Fraction"] = merged["Count"] / merged["Total"]
+
+pivot_df = merged.pivot(index="AlphaRatio", columns="BlockedLane", values="Fraction").fillna(0)
+pivot_df = pivot_df[["Short", "Through"]]  # Ensure order
+
+pivot_df.plot(kind="bar", stacked=True, color=["blue", "red"], alpha=0.6, figsize=(14, 6))
+plt.title("Frequency of Blocked Lane Type vs Lane Usage Ratio")
+plt.xlabel(r"$\alpha / (1 - \alpha)$")
+plt.ylabel("Fraction of Blockages")
+plt.xticks(rotation=45)
+plt.legend(title="Blocked Lane")
+plt.grid(axis='y', linestyle='--', linewidth=0.5)
+plt.tight_layout()
+plt.savefig('blockage_frequency.png', dpi=300)
+plt.show()
