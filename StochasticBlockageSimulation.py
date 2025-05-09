@@ -103,30 +103,6 @@ for i in range(len(blue_data_flat)):
         plot_colors.append("red")
         plot_pos.append(x_positions[2 * i + 1])
 
-# === Plot 0: Boxplot ===
-plt.figure(figsize=(14, 6))
-box = plt.boxplot(plot_data, positions=plot_pos, widths=0.25, patch_artist=True)
-for patch, color in zip(box['boxes'], plot_colors):
-    patch.set_facecolor(color)
-    patch.set_alpha(0.5)
-
-xtick_positions = [i for i in range(len(x_labels))]
-plt.xticks(xtick_positions, x_labels, rotation=45)
-plt.axhline(1, color='gray', linestyle='--')
-plt.xlabel(r'$\alpha / (1 - \alpha)$')
-plt.ylabel('Queue in Blocked Lane / N')
-plt.title('Queue Ratio by Blocked Lane Type for Each Lane Usage Ratio')
-plt.grid(True, linestyle='--', linewidth=0.5)
-
-plt.legend(handles=[
-    plt.Line2D([0], [0], color='blue', lw=6, label='Short Lane Blocked', alpha=0.5),
-    plt.Line2D([0], [0], color='red', lw=6, label='Through Lane Blocked', alpha=0.5)
-])
-
-plt.tight_layout()
-plt.savefig('boxplot.png', dpi=300)
-plt.show()
-
 # === Common DataFrame for all other plots ===
 plot_records = []
 for alpha in alphas:
@@ -152,48 +128,41 @@ data = []
 colors = []
 
 for i, ratio in enumerate(unique_ratios):
-    for j, lane in enumerate(["short", "through"]):
-        values = df_plot[(df_plot["AlphaRatio"] == ratio) & (df_plot["BlockedLane"] == lane)]["QueueRatio"].values
-        if len(values) > 0:
-            data.append(values)
-            positions.append(i + (j - 0.5) * 0.2)
-            colors.append("blue" if lane == "short" else "red")
+    short_vals = df_plot[(df_plot["AlphaRatio"] == ratio) & (df_plot["BlockedLane"] == "Short")]["QueueRatio"].values
+    through_vals = df_plot[(df_plot["AlphaRatio"] == ratio) & (df_plot["BlockedLane"] == "Through")]["QueueRatio"].values
 
-box = ax.boxplot(data, positions=positions, widths=0.15, patch_artist=True)
+    if len(short_vals) > 0:
+        data.append(short_vals)
+        positions.append(i - 0.15)
+        colors.append("blue")
 
-for patch, color in zip(box['boxes'], colors):
+    if len(through_vals) > 0:
+        data.append(through_vals)
+        positions.append(i + 0.15)
+        colors.append("red")
+
+
+# === Plot 1: Boxplot ===
+box = plt.boxplot(plot_data, positions=plot_pos, widths=0.25, patch_artist=True)
+for patch, color in zip(box['boxes'], plot_colors):
     patch.set_facecolor(color)
     patch.set_alpha(0.5)
 
-ax.axhline(1, linestyle='--', color='gray')
-ax.set_title('Queue Ratio by Blocked Lane Type for Each Lane Usage Ratio')
-ax.set_xlabel(r"$\alpha / (1 - \alpha)$")
-ax.set_ylabel("Queue in Blocked Lane / N")
-ax.set_xticks(range(len(unique_ratios)))
-ax.set_xticklabels([f"{r:.2f}" for r in unique_ratios], rotation=45)
+xtick_positions = [i for i in range(len(x_labels))]
+plt.xticks(xtick_positions, x_labels, rotation=45)
+plt.axhline(1, color='gray', linestyle='--')
+plt.xlabel(r'$\alpha / (1 - \alpha)$')
+plt.ylabel('Queue in Blocked Lane / N')
+plt.title('Queue Ratio by Blocked Lane Type for Each Lane Usage Ratio')
+plt.grid(True, linestyle='--', linewidth=0.5)
 
-ax.legend(handles=[
+plt.legend(handles=[
     plt.Line2D([0], [0], color='blue', lw=6, label='Short Lane Blocked', alpha=0.5),
     plt.Line2D([0], [0], color='red', lw=6, label='Through Lane Blocked', alpha=0.5)
 ])
 
-plt.grid(True, linestyle="--", axis="y", linewidth=0.5)
 plt.tight_layout()
-plt.show()
-plt.savefig('boxplot.png')
-
-# === Plot 1: Violin Plot ===
-plt.figure(figsize=(14, 6))
-sns.violinplot(data=df_plot, x="AlphaRatio", y="QueueRatio", hue="BlockedLane", split=True,
-               palette={"Short": "blue", "Through": "red"}, cut=0)
-plt.axhline(1, linestyle="--", color="gray")
-plt.title("Violin Plot: Queue Ratio by Lane and Usage Ratio")
-plt.xlabel(r"$\alpha / (1 - \alpha)$")
-plt.ylabel("Queue in Blocked Lane / N")
-plt.legend(title="Blocked Lane")
-plt.xticks(rotation=45)
-plt.tight_layout()
-plt.savefig('violin.png', dpi=300)
+plt.savefig('boxplot.png', dpi=300)
 plt.show()
 
 # === Plot 2: Line Plot of Mean Values ===
@@ -242,4 +211,63 @@ plt.legend(title="Blocked Lane")
 plt.grid(axis='y', linestyle='--', linewidth=0.5)
 plt.tight_layout()
 plt.savefig('blockage_frequency.png', dpi=300)
+plt.show()
+
+plt.figure(figsize=(14, 6))
+sns.violinplot(
+    data=df_plot,
+    x="AlphaRatio",
+    y="QueueRatio",
+    hue="BlockedLane",
+    split=True,
+    palette={"Short": "blue", "Through": "orange"},
+    inner="quartile"
+)
+
+plt.title("Queue Ratios by Blocked Lane")
+plt.xlabel(r"$\alpha / (1 - \alpha)$")
+plt.ylabel("Queue in Blocked Lane / N")
+plt.xticks(rotation=45)
+plt.grid(True, linestyle="--", linewidth=0.5)
+plt.legend(title="Blocked Lane")
+plt.savefig('violin.png', dpi=300)
+plt.show()
+
+
+# Count frequency of each (AlphaRatio, QueueRatio) pair
+counts_df = df_plot.groupby(["AlphaRatio", "QueueRatio"]).size().reset_index(name="Count")
+
+# Normalize the count to control the size range
+counts_df["Size"] = counts_df["Count"] / counts_df["Count"].max() * 300
+counts_df["Size"] = counts_df["Size"].clip(lower=20)  # enforce visibility
+
+# Mean line
+mean_line_df = df_plot.groupby("AlphaRatio")["QueueRatio"].mean().reset_index()
+
+plt.figure(figsize=(14, 6))
+
+# Bubble points
+plt.scatter(counts_df["AlphaRatio"], counts_df["QueueRatio"], s=counts_df["Size"],
+            alpha=0.5, color="steelblue", edgecolors="gray", label='Simulation Results')
+
+# Mean line
+plt.plot(mean_line_df["AlphaRatio"], mean_line_df["QueueRatio"],
+         color="darkred", marker='o', linestyle='-', linewidth=2, label="Mean Queue Ratio")
+
+# Reference curves
+x_vals_1 = np.linspace(0.01, 1, 100)
+plt.plot(x_vals_1, x_vals_1, color="green", linewidth=2, label="y = x (x ≤ 1)")
+
+x_vals_2 = np.linspace(1, 19, 200)
+plt.plot(x_vals_2, 1 / x_vals_2, color="green", linewidth=2, label="y = 1/x (x > 1)")
+
+# Axes and labels
+plt.title("Bubble Plot with Mean Queue Ratio and Reference Curves")
+plt.xlabel(r"$\alpha / (1 - \alpha)$")
+plt.ylabel("Queue in Blocked Lane / N")
+plt.grid(True, linestyle="--", linewidth=0.5)
+plt.xticks(rotation=45)
+plt.legend()
+plt.tight_layout()
+plt.savefig('scatter.png', dpi=300)
 plt.show()
