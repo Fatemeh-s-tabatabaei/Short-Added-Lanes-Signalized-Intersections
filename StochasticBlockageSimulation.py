@@ -57,10 +57,10 @@ def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, red=36, see
     return pd.DataFrame(results)
 
 # ==== Plotting over varying alpha ====
-alphas = np.arange(0, 1.01, 0.05)
-N = 5
-simulation_runs = 50
-v = 900
+alphas = np.arange(0, 1.01, 0.02)
+N = 7
+simulation_runs = 1000
+v = 1800
 red = 36
 
 from collections import defaultdict
@@ -213,9 +213,17 @@ plt.tight_layout()
 plt.savefig('blockage_frequency.png', dpi=300)
 plt.show()
 
+# Step 1: Define target alpha values and compute their ratios
+target_alphas = np.round(np.arange(0.0, 1.01, 0.1), 2)
+target_ratios = [round(a / (1 - a), 2) if a < 1 else np.inf for a in target_alphas]
+
+# Step 2: Filter df_plot to include only those alpha ratios
+df_violin = df_plot[df_plot["AlphaRatio"].isin(target_ratios)].copy()
+
+# Step 3: Create violin plot
 plt.figure(figsize=(14, 6))
 sns.violinplot(
-    data=df_plot,
+    data=df_violin,
     x="AlphaRatio",
     y="QueueRatio",
     hue="BlockedLane",
@@ -224,14 +232,16 @@ sns.violinplot(
     inner="quartile"
 )
 
-plt.title("Queue Ratios by Blocked Lane")
+plt.title("Queue Ratios by Blocked Lane (Selected α Values)")
 plt.xlabel(r"$\alpha / (1 - \alpha)$")
 plt.ylabel("Queue in Blocked Lane / N")
 plt.xticks(rotation=45)
 plt.grid(True, linestyle="--", linewidth=0.5)
 plt.legend(title="Blocked Lane")
-plt.savefig('violin.png', dpi=300)
+plt.tight_layout()
+plt.savefig("violin.png", dpi=300)
 plt.show()
+
 
 
 # Count frequency of each (AlphaRatio, QueueRatio) pair
@@ -270,4 +280,83 @@ plt.xticks(rotation=45)
 plt.legend()
 plt.tight_layout()
 plt.savefig('scatter.png', dpi=300)
+plt.show()
+
+
+# === Plot: Blockage Probability ===
+blockage_prob = []
+for alpha in alphas:
+    if alpha == 1:
+        continue
+    ratio = round(alpha / (1 - alpha), 2)
+    df_all = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, red=red, seed=42)
+    blockage_rate = df_all["BlockageOccurred"].mean()
+    blockage_prob.append({"AlphaRatio": ratio, "BlockageRate": blockage_rate})
+
+df_prob = pd.DataFrame(blockage_prob)
+
+plt.figure(figsize=(14, 6))
+sns.lineplot(data=df_prob, x="AlphaRatio", y="BlockageRate", marker="o", color="purple")
+plt.title("Blockage Probability vs Lane Usage Ratio")
+plt.xlabel(r"$\alpha / (1 - \alpha)$")
+plt.ylabel("Probability of Blockage Occurrence")
+plt.xticks(rotation=45)
+plt.grid(True, linestyle="--", linewidth=0.5)
+plt.tight_layout()
+plt.savefig('blockage_probability.png', dpi=300)
+plt.show()
+
+mean_lines = []
+
+for N in Ns:
+    records = []
+    for alpha in alphas:
+        if alpha == 1:
+            continue
+        ratio = round(alpha / (1 - alpha), 2)
+        df = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, red=red, seed=42)
+        df = df[df["BlockageOccurred"]]
+        if not df.empty:
+            for _, row in df.iterrows():
+                records.append({
+                    "N": N,
+                    "AlphaRatio": ratio,
+                    "QueueRatio": row["QueueInBlockedLane"] / N
+                })
+
+    df_temp = pd.DataFrame(records)
+    df_mean = df_temp.groupby("AlphaRatio")["QueueRatio"].mean().reset_index()
+    df_mean["N"] = N
+    mean_lines.append(df_mean)
+
+df_all_means = pd.concat(mean_lines, ignore_index=True)
+
+# Now regenerate the individual subplots for each N
+fig, axes = plt.subplots(len(Ns), 1, figsize=(8, 2.5 * len(Ns)), sharex=True)
+
+# Define x values for reference curves
+x_vals = np.linspace(0.01, 100, 500)
+y_x = x_vals
+y_invx = 1 / x_vals
+
+for idx, N in enumerate(Ns):
+    ax = axes[idx]
+    df_n = df_all_means[df_all_means["N"] == N]
+    ax.plot(df_n["AlphaRatio"], df_n["QueueRatio"], label=f"N = {N}", color="tab:blue")
+
+    # Reference lines
+    ax.plot(x_vals, y_x, '--', color='black', linewidth=1, label='y = x' if idx == 0 else "")
+    ax.plot(x_vals, y_invx, '--', color='black', linewidth=2, label='y = 1/x' if idx == 0 else "")
+
+    ax.set_ylim(0, 1)
+    ax.set_ylabel("Queue / N")
+    ax.set_title(f"Mean Queue Ratio for N = {N}")
+    ax.grid(True, linestyle="--", linewidth=0.5)
+    if idx == len(Ns) - 1:
+        ax.set_xlabel(r"$\alpha / (1 - \alpha)$")
+    if idx == 0:
+        ax.legend()
+
+plt.tight_layout()
+plt.savefig("separate_mean_lines_by_N.png", dpi=300)
 plt.show()
