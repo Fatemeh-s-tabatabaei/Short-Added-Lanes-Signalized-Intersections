@@ -307,7 +307,7 @@ plt.savefig('blockage_probability.png', dpi=300)
 plt.show()
 
 mean_lines = []
-
+Ns = range(1, 21)
 for N in Ns:
     records = []
     for alpha in alphas:
@@ -356,7 +356,7 @@ for idx, N in enumerate(Ns):
         ax.set_xlabel(r"$\alpha / (1 - \alpha)$")
     if idx == 0:
         ax.legend()
-
+plt.xlim(0, 20)
 plt.tight_layout()
 plt.savefig("separate_mean_lines_by_N.png", dpi=300)
 plt.show()
