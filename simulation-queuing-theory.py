@@ -1,34 +1,34 @@
-import numpy as np
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from collections import defaultdict
 
 def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, red=36, seed=None):
     if seed is not None:
         np.random.seed(seed)
-        
+
     results = []
+    arrival_rate_per_sec = v / 3600
+    departure_time_per_vehicle = 3600 / 1800  # 2 seconds per vehicle
 
     for _ in range(simulations):
+        current_time = 0.0
         arrival_times = []
-        current_time = 0
-        arrival_rate_per_sec = v / 3600
-
-        while current_time < red:
-            inter_arrival = np.random.exponential(1 / arrival_rate_per_sec)
-            current_time += inter_arrival
-            if current_time < red:
-                arrival_times.append(current_time)
-            else:
-                break
-
-        short_lane_queue = 0
-        through_lane_queue = 0
+        blockage_occurred = False
         blockage_time = None
         blocked_lane = None
         queue_at_blocked_lane = None
-        blockage_occurred = False
+        # Step 1: arrivals during red
+        while current_time < red:
+            inter_arrival = np.random.exponential(1 / arrival_rate_per_sec)
+            current_time += inter_arrival
+            arrival_times.append(current_time)
 
+
+        # Step 2: assign to lanes
+        short_lane_queue = 0
+        through_lane_queue = 0
         for t in arrival_times:
             if np.random.rand() < alpha:
                 short_lane_queue += 1
@@ -39,19 +39,65 @@ def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, red=36, see
                     queue_at_blocked_lane = through_lane_queue
                     break
             else:
-                through_lane_queue += 1
+                through_lane_queue += 1                
                 if through_lane_queue == N + 1:
                     blockage_occurred = True
                     blockage_time = t
                     blocked_lane = 'short'
                     queue_at_blocked_lane = short_lane_queue
                     break
+        
+        if blockage_occurred:
+            results.append({
+                "BlockageOccurred": blockage_occurred,
+                "BlockedLane": blocked_lane,
+                "BlockageTime": blockage_time,
+                "QueueInBlockedLane": queue_at_blocked_lane
+            })
+            continue
+
+        # Step 3: calculate initial discharge times
+        short_discharge_end = red + short_lane_queue * departure_time_per_vehicle
+        through_discharge_end = red + through_lane_queue * departure_time_per_vehicle
+
+        # Step 4: simulate arrival during discharge and check for blockage
+        next_arrival = arrival_times[-1]
+
+        while True:
+
+            if np.random.rand() < alpha:
+                if next_arrival > short_discharge_end:
+                    break
+                else:
+                    short_lane_queue += 1
+                    if short_lane_queue == N + 1:
+                        blockage_occurred = True
+                        blockage_time = next_arrival
+                        blocked_lane = 'through'
+                        queue_at_blocked_lane = through_lane_queue  # Record value before it can change
+                        break
+                    short_discharge_end += departure_time_per_vehicle
+            else:
+                if next_arrival > through_discharge_end:
+                    break
+                else:
+
+                    through_lane_queue += 1
+                    if through_lane_queue == N + 1:
+                        blockage_occurred = True
+                        blockage_time = next_arrival
+                        blocked_lane = 'short'
+                        queue_at_blocked_lane = short_lane_queue  # Record value before it can change
+                        break
+                    through_discharge_end += departure_time_per_vehicle
+            inter_arrival = np.random.exponential(1 / arrival_rate_per_sec)
+            next_arrival += inter_arrival
 
         results.append({
             "BlockageOccurred": blockage_occurred,
             "BlockedLane": blocked_lane,
-            "BlockageTime": blockage_time if blockage_occurred else red,
-            "QueueInBlockedLane": queue_at_blocked_lane if blockage_occurred else (through_lane_queue if blocked_lane == 'through' else short_lane_queue)
+            "BlockageTime": blockage_time if blockage_occurred else max(short_discharge_end, through_discharge_end),
+            "QueueInBlockedLane": queue_at_blocked_lane if blockage_occurred else np.nan
         })
 
     return pd.DataFrame(results)
@@ -60,10 +106,9 @@ def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, red=36, see
 alphas = np.arange(0, 1.01, 0.02)
 N = 7
 simulation_runs = 1000
-v = 1800
-red = 50
+v = 1000
+red = 36
 
-from collections import defaultdict
 
 x_labels = []
 x_positions = []
@@ -80,7 +125,7 @@ for alpha in alphas:
     x_labels.append(f"{ratio:.2f}")
     x_positions.extend([base_pos - offset, base_pos + offset])
 
-    df = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, red=red, seed=42)
+    df = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, red=red)
     df = df[df["BlockageOccurred"]]
 
     blue_data_flat.append([row["QueueInBlockedLane"] / N for _, row in df.iterrows() if row["BlockedLane"] == "short"])
