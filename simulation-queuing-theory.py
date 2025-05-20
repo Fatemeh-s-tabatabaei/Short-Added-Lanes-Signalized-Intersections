@@ -395,7 +395,7 @@ for idx, N in enumerate(Ns):
         ax.set_xlabel(r"$\alpha / (1 - \alpha)$")
     if idx == 0:
         ax.legend()
-plt.xlim(0, 10)
+plt.xlim(0, 1)
 plt.tight_layout()
 plt.savefig("separate_mean_lines_by_N.png", dpi=300)
 plt.show()
