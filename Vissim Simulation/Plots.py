@@ -16,7 +16,7 @@ df_capacity_sorted = df_capacity.sort_values('cycle')
 plt.figure(figsize=(12, 8))
 
 # Enhanced boxplots
-plt.boxplot(data, positions=cycles_sim, widths=3,
+box = plt.boxplot(data, positions=cycles_sim, widths=3,
             patch_artist=True,
             boxprops=dict(facecolor='#AED6F1', color='#2980B9', linewidth=1.5),
             medianprops=dict(color='#154360', linewidth=2),
@@ -45,5 +45,5 @@ plt.grid(True, linestyle='--', linewidth=0.5, alpha=0.7)
 plt.xticks(fontsize=18, fontproperties='Times New Roman')
 plt.yticks(fontsize=18, fontproperties='Times New Roman')
 plt.tight_layout()
-
+plt.savefig('SimVsTheory-Approach.png')
 plt.show()
