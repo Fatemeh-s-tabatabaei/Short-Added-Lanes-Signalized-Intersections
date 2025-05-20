@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import defaultdict
 
-def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, red=36, seed=None):
+def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, b=6, red=36, seed=None):
     if seed is not None:
         np.random.seed(seed)
 
@@ -105,6 +105,7 @@ def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, red=36, see
 # ==== Plotting over varying alpha ====
 alphas = np.arange(0, 1.01, 0.02)
 N = 7
+b = 6
 simulation_runs = 1000
 v = 1800
 red = 36
@@ -129,7 +130,7 @@ for alpha in alphas:
     df = df[df["BlockageOccurred"]]
 
     blue_data_flat.append([row["QueueInBlockedLane"] / N for _, row in df.iterrows() if row["BlockedLane"] == "short"])
-    red_data_flat.append([row["QueueInBlockedLane"] / N for _, row in df.iterrows() if row["BlockedLane"] == "through"])
+    red_data_flat.append([row["QueueInBlockedLane"] / b for _, row in df.iterrows() if row["BlockedLane"] == "through"])
 
     base_pos += 1
 
@@ -154,7 +155,7 @@ for alpha in alphas:
     if alpha == 1:
         continue
     ratio = round(alpha / (1 - alpha), 2)
-    df = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, red=red, seed=42)
+    df = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, b=b, red=red, seed=42)
     df = df[df["BlockageOccurred"]]
     for _, row in df.iterrows():
         plot_records.append({
@@ -345,7 +346,7 @@ plt.savefig('blockage_probability.png', dpi=300)
 plt.show()
 
 mean_lines = []
-Ns = range(1, 21)
+Ns = range(2, 20)
 for N in Ns:
     records = []
     for alpha in alphas:
