@@ -32,7 +32,7 @@ def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, red=36, see
         for t in arrival_times:
             if np.random.rand() < alpha:
                 short_lane_queue += 1
-                if short_lane_queue == N + 1:
+                if short_lane_queue == N:
                     blockage_occurred = True
                     blockage_time = t
                     blocked_lane = 'through'
@@ -40,7 +40,7 @@ def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, red=36, see
                     break
             else:
                 through_lane_queue += 1                
-                if through_lane_queue == N + 1:
+                if through_lane_queue == N:
                     blockage_occurred = True
                     blockage_time = t
                     blocked_lane = 'short'
@@ -70,7 +70,7 @@ def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, red=36, see
                     break
                 else:
                     short_lane_queue += 1
-                    if short_lane_queue == N + 1:
+                    if short_lane_queue == N:
                         blockage_occurred = True
                         blockage_time = next_arrival
                         blocked_lane = 'through'
@@ -83,7 +83,7 @@ def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, red=36, see
                 else:
 
                     through_lane_queue += 1
-                    if through_lane_queue == N + 1:
+                    if through_lane_queue == N:
                         blockage_occurred = True
                         blockage_time = next_arrival
                         blocked_lane = 'short'
@@ -106,7 +106,7 @@ def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, red=36, see
 alphas = np.arange(0, 1.01, 0.02)
 N = 7
 simulation_runs = 1000
-v = 1000
+v = 1800
 red = 36
 
 
@@ -125,7 +125,7 @@ for alpha in alphas:
     x_labels.append(f"{ratio:.2f}")
     x_positions.extend([base_pos - offset, base_pos + offset])
 
-    df = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, red=red)
+    df = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, red=red, seed=42)
     df = df[df["BlockageOccurred"]]
 
     blue_data_flat.append([row["QueueInBlockedLane"] / N for _, row in df.iterrows() if row["BlockedLane"] == "short"])
@@ -313,6 +313,7 @@ plt.xlabel(r"$\alpha / (1 - \alpha)$")
 plt.ylabel("Queue in Blocked Lane / N")
 plt.grid(True, linestyle="--", linewidth=0.5)
 plt.xticks(rotation=45)
+plt.xlim(0, 1)
 plt.legend()
 plt.tight_layout()
 plt.savefig('scatter.png', dpi=300)
@@ -339,6 +340,7 @@ plt.ylabel("Probability of Blockage Occurrence")
 plt.xticks(rotation=45)
 plt.grid(True, linestyle="--", linewidth=0.5)
 plt.tight_layout()
+plt.xlim(0, 1)
 plt.savefig('blockage_probability.png', dpi=300)
 plt.show()
 
@@ -392,7 +394,7 @@ for idx, N in enumerate(Ns):
         ax.set_xlabel(r"$\alpha / (1 - \alpha)$")
     if idx == 0:
         ax.legend()
-plt.xlim(0, 20)
+plt.xlim(0, 10)
 plt.tight_layout()
 plt.savefig("separate_mean_lines_by_N.png", dpi=300)
 plt.show()
