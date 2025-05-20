@@ -399,3 +399,35 @@ plt.xlim(0, 1)
 plt.tight_layout()
 plt.savefig("separate_mean_lines_by_N.png", dpi=300)
 plt.show()
+
+# Plot sensitivity to short lane length
+
+alpha = 0.15
+N_values = range(2, 21)
+avg_queue_ratios = []
+alpha = 0.15
+v = 1800
+red = 36
+simulation_runs = 1000
+
+for N in N_values:
+    df = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, red=red, seed=42)
+    if not df.empty:
+        df_blocked = df[df["BlockageOccurred"]]
+        if not df_blocked.empty:
+            avg_queue_ratios.append(np.mean(df_blocked["QueueInBlockedLane"] / N))
+        else:
+            avg_queue_ratios.append(0)
+    else:
+        avg_queue_ratios.append(0)
+
+# Plot
+plt.figure(figsize=(10, 6))
+plt.plot(N_values, avg_queue_ratios, marker='o', linestyle='-', color='blue')
+plt.title('Average Queue/N for Blockage Cases (α = 0.15)')
+plt.xlabel('N (Queue Threshold)')
+plt.ylabel('Average Queue in Blocked Lane / N')
+plt.grid(True, linestyle='--', linewidth=0.5)
+plt.tight_layout()
+plt.savefig('Sensitivity_to_Length.png', dpi=300)
+plt.show()
