@@ -16,7 +16,7 @@ df_capacity_sorted = df_capacity.sort_values('cycle')
 plt.figure(figsize=(12, 8))
 
 # Enhanced boxplots
-box = plt.boxplot(data, positions=cycles_sim, widths=3,
+box = plt.boxplot(data, positions=cycles_sim, widths=3, whis=[5, 95],
             patch_artist=True,
             boxprops=dict(facecolor='#AED6F1', color='#2980B9', linewidth=1.5),
             medianprops=dict(color='#154360', linewidth=2),

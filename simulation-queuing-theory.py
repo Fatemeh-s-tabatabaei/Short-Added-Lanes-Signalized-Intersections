@@ -1,217 +1,171 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.stats import nbinom
 import seaborn as sns
-from collections import defaultdict
 
-def event_based_simulation(simulations=1000, v=1000, alpha=1/3, N=7, b=6, red=36, seed=None):
+# Parameters
+alphas = np.round(np.arange(0, 1.0, 0.02), 2)
+ratios = np.round(alphas / (1 - alphas), 2)
+valid_indices = ~np.isinf(ratios)
+alphas = alphas[valid_indices]
+ratios = ratios[valid_indices]
+ratio_labels = [f"{r:.2f}" for r in ratios]
+
+# Constants
+N = 7
+v = 1800
+red = 36
+simulation_runs = 1000
+
+# Reusable Simulation
+def event_based_simulation(simulations=1000, v=1800, alpha=1/3, N=7, red=36, seed=None):
     if seed is not None:
         np.random.seed(seed)
-
     results = []
     arrival_rate_per_sec = v / 3600
-    departure_time_per_vehicle = 3600 / 1800  # 2 seconds per vehicle
-
+    departure_time_per_vehicle = 2.0
     for _ in range(simulations):
         current_time = 0.0
         arrival_times = []
-        blockage_occurred = False
-        blockage_time = None
-        blocked_lane = None
-        queue_at_blocked_lane = None
-        # Step 1: arrivals during red
         while current_time < red:
             inter_arrival = np.random.exponential(1 / arrival_rate_per_sec)
             current_time += inter_arrival
             arrival_times.append(current_time)
 
-
-        # Step 2: assign to lanes
         short_lane_queue = 0
         through_lane_queue = 0
+        blockage_occurred = False
+        blocked_lane = None
+        queue_at_blocked_lane = None
+
         for t in arrival_times:
             if np.random.rand() < alpha:
                 short_lane_queue += 1
                 if short_lane_queue == N:
                     blockage_occurred = True
-                    blockage_time = t
                     blocked_lane = 'through'
                     queue_at_blocked_lane = through_lane_queue
                     break
             else:
-                through_lane_queue += 1                
+                through_lane_queue += 1
                 if through_lane_queue == N:
                     blockage_occurred = True
-                    blockage_time = t
                     blocked_lane = 'short'
                     queue_at_blocked_lane = short_lane_queue
                     break
-        
+
         if blockage_occurred:
             results.append({
-                "BlockageOccurred": blockage_occurred,
                 "BlockedLane": blocked_lane,
-                "BlockageTime": blockage_time,
-                "QueueInBlockedLane": queue_at_blocked_lane
+                "QueueInBlockedLane": queue_at_blocked_lane,
+                "BlockageOccurred": True
             })
             continue
 
-        # Step 3: calculate initial discharge times
-        short_discharge_end = red + short_lane_queue * departure_time_per_vehicle
-        through_discharge_end = red + through_lane_queue * departure_time_per_vehicle
-
-        # Step 4: simulate arrival during discharge and check for blockage
+        short_end = red + short_lane_queue * departure_time_per_vehicle
+        through_end = red + through_lane_queue * departure_time_per_vehicle
         next_arrival = arrival_times[-1]
-
         while True:
-
             if np.random.rand() < alpha:
-                if next_arrival > short_discharge_end:
+                if next_arrival > short_end: break
+                short_lane_queue += 1
+                if short_lane_queue == N:
+                    results.append({
+                        "BlockedLane": "through",
+                        "QueueInBlockedLane": through_lane_queue,
+                        "BlockageOccurred": True
+                    })
                     break
-                else:
-                    short_lane_queue += 1
-                    if short_lane_queue == N:
-                        blockage_occurred = True
-                        blockage_time = next_arrival
-                        blocked_lane = 'through'
-                        queue_at_blocked_lane = through_lane_queue  # Record value before it can change
-                        break
-                    short_discharge_end += departure_time_per_vehicle
+                short_end += departure_time_per_vehicle
             else:
-                if next_arrival > through_discharge_end:
+                if next_arrival > through_end: break
+                through_lane_queue += 1
+                if through_lane_queue == N:
+                    results.append({
+                        "BlockedLane": "short",
+                        "QueueInBlockedLane": short_lane_queue,
+                        "BlockageOccurred": True
+                    })
                     break
-                else:
-
-                    through_lane_queue += 1
-                    if through_lane_queue == N:
-                        blockage_occurred = True
-                        blockage_time = next_arrival
-                        blocked_lane = 'short'
-                        queue_at_blocked_lane = short_lane_queue  # Record value before it can change
-                        break
-                    through_discharge_end += departure_time_per_vehicle
+                through_end += departure_time_per_vehicle
             inter_arrival = np.random.exponential(1 / arrival_rate_per_sec)
             next_arrival += inter_arrival
-
-        results.append({
-            "BlockageOccurred": blockage_occurred,
-            "BlockedLane": blocked_lane,
-            "BlockageTime": blockage_time if blockage_occurred else max(short_discharge_end, through_discharge_end),
-            "QueueInBlockedLane": queue_at_blocked_lane if blockage_occurred else np.nan
-        })
-
     return pd.DataFrame(results)
 
-# ==== Plotting over varying alpha ====
-alphas = np.arange(0, 1.01, 0.02)
-N = 7
-b = 6
-simulation_runs = 1000
-v = 1800
-red = 36
-
-
-x_labels = []
-x_positions = []
-blue_data_flat = []
-red_data_flat = []
-
-offset = 0.15
-base_pos = 0
+# Run simulation once for all alpha values
+full_records = []
 
 for alpha in alphas:
-    if alpha == 1:
-        continue
     ratio = round(alpha / (1 - alpha), 2)
-    x_labels.append(f"{ratio:.2f}")
-    x_positions.extend([base_pos - offset, base_pos + offset])
+    df_sim = event_based_simulation(alpha=alpha, N=N, b=b, simulations=simulation_runs, red=red, v=v, seed=42)
+    for _, row in df_sim.iterrows():
+        if row["BlockedLane"] == "short":
+            full_records.append({
+                "Alpha": alpha,
+                "AlphaRatio": ratio,
+                "BlockedLane": "Short",
+                "QueueRatio": row["QueueInBlockedLane"] / N,
+                "BlockageOccurred": row["BlockageOccurred"]
+            })
+        elif row["BlockedLane"] == "through":
+            full_records.append({
+                "Alpha": alpha,
+                "AlphaRatio": ratio,
+                "BlockedLane": "Through",
+                "QueueRatio": row["QueueInBlockedLane"] / b,
+                "BlockageOccurred": row["BlockageOccurred"]
+            })
 
-    df = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, red=red, seed=42)
-    df = df[df["BlockageOccurred"]]
+df_plot = pd.DataFrame(full_records)
 
-    blue_data_flat.append([row["QueueInBlockedLane"] / N for _, row in df.iterrows() if row["BlockedLane"] == "short"])
-    red_data_flat.append([row["QueueInBlockedLane"] / b for _, row in df.iterrows() if row["BlockedLane"] == "through"])
-
-    base_pos += 1
-
-# Prepare data for plotting
+# === Plot 1: Boxplot ===
 plot_data = []
 plot_colors = []
 plot_pos = []
+x_labels = []
+base_pos = 0
+offset = 0.15
 
-for i in range(len(blue_data_flat)):
-    if blue_data_flat[i]:
-        plot_data.append(blue_data_flat[i])
+for r in sorted(df_plot["AlphaRatio"].unique()):
+    df_r = df_plot[df_plot["AlphaRatio"] == r]
+    short_vals = df_r[df_r["BlockedLane"] == "Short"]["QueueRatio"]
+    through_vals = df_r[df_r["BlockedLane"] == "Through"]["QueueRatio"]
+
+    if not short_vals.empty:
+        plot_data.append(short_vals.tolist())
         plot_colors.append("blue")
-        plot_pos.append(x_positions[2 * i])
-    if red_data_flat[i]:
-        plot_data.append(red_data_flat[i])
+        plot_pos.append(base_pos - offset)
+    if not through_vals.empty:
+        plot_data.append(through_vals.tolist())
         plot_colors.append("red")
-        plot_pos.append(x_positions[2 * i + 1])
+        plot_pos.append(base_pos + offset)
 
-# === Common DataFrame for all other plots ===
-plot_records = []
-for alpha in alphas:
-    if alpha == 1:
-        continue
-    ratio = round(alpha / (1 - alpha), 2)
-    df = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, b=b, red=red, seed=42)
-    df = df[df["BlockageOccurred"]]
-    for _, row in df.iterrows():
-        plot_records.append({
-            "AlphaRatio": ratio,
-            "QueueRatio": row["QueueInBlockedLane"] / N,
-            "BlockedLane": "Short" if row["BlockedLane"] == "short" else "Through"
-        })
+    x_labels.append(f"{r:.2f}")
+    base_pos += 1
 
-df_plot = pd.DataFrame(plot_records)
-
-fig, ax = plt.subplots(figsize=(16, 6))
-
-unique_ratios = sorted(df_plot["AlphaRatio"].unique())
-positions = []
-data = []
-colors = []
-
-for i, ratio in enumerate(unique_ratios):
-    short_vals = df_plot[(df_plot["AlphaRatio"] == ratio) & (df_plot["BlockedLane"] == "Short")]["QueueRatio"].values
-    through_vals = df_plot[(df_plot["AlphaRatio"] == ratio) & (df_plot["BlockedLane"] == "Through")]["QueueRatio"].values
-
-    if len(short_vals) > 0:
-        data.append(short_vals)
-        positions.append(i - 0.15)
-        colors.append("blue")
-
-    if len(through_vals) > 0:
-        data.append(through_vals)
-        positions.append(i + 0.15)
-        colors.append("red")
-
-
-# === Plot 1: Boxplot ===
+plt.figure(figsize=(16, 6))
 box = plt.boxplot(plot_data, positions=plot_pos, widths=0.25, patch_artist=True)
 for patch, color in zip(box['boxes'], plot_colors):
     patch.set_facecolor(color)
     patch.set_alpha(0.5)
 
-xtick_positions = [i for i in range(len(x_labels))]
+xtick_positions = list(range(len(x_labels)))
 plt.xticks(xtick_positions, x_labels, rotation=45)
 plt.axhline(1, color='gray', linestyle='--')
 plt.xlabel(r'$\alpha / (1 - \alpha)$')
 plt.ylabel('Queue in Blocked Lane / N')
 plt.title('Queue Ratio by Blocked Lane Type for Each Lane Usage Ratio')
 plt.grid(True, linestyle='--', linewidth=0.5)
-
 plt.legend(handles=[
     plt.Line2D([0], [0], color='blue', lw=6, label='Short Lane Blocked', alpha=0.5),
     plt.Line2D([0], [0], color='red', lw=6, label='Through Lane Blocked', alpha=0.5)
 ])
-
 plt.tight_layout()
 plt.savefig('boxplot.png', dpi=300)
 plt.show()
 
-# === Plot 2: Line Plot of Mean Values ===
+# === Plot 2: Line Plot of Mean Queue Ratio ===
 plt.figure(figsize=(14, 6))
 mean_df = df_plot.groupby(["AlphaRatio", "BlockedLane"])["QueueRatio"].mean().reset_index()
 sns.lineplot(data=mean_df, x="AlphaRatio", y="QueueRatio", hue="BlockedLane", marker="o",
@@ -222,42 +176,45 @@ plt.xlabel(r"$\alpha / (1 - \alpha)$")
 plt.ylabel("Mean Queue in Blocked Lane / N")
 plt.legend(title="Blocked Lane")
 plt.xticks(rotation=45)
-plt.grid(True)
+plt.grid(True, linestyle="--", linewidth=0.5)
 plt.tight_layout()
 plt.savefig('lineplot.png', dpi=300)
 plt.show()
 
+# === Plot 3: Stacked Bar Plot with Theoretical Curve ===
+freq_df = df_plot.groupby(["AlphaRatio", "BlockedLane"]).size().unstack(fill_value=0)
+freq_df["Total"] = freq_df.sum(axis=1)
+freq_df["Short"] = freq_df["Short"] / freq_df["Total"]
+freq_df["Through"] = freq_df["Through"] / freq_df["Total"]
 
-# === Plot 3: Stacked Bar Plot for Frequency ===
-blockage_counts = df_plot.groupby(["AlphaRatio", "BlockedLane"]).size().reset_index(name="Count")
-total_counts = df_plot.groupby("AlphaRatio").size().reset_index(name="Total")
-merged = pd.merge(blockage_counts, total_counts, on="AlphaRatio")
-merged["Fraction"] = merged["Count"] / merged["Total"]
+cdf = nbinom.cdf(N - 1, N, alphas)
+one_minus_cdf = 1 - cdf
 
-pivot_df = merged.pivot(index="AlphaRatio", columns="BlockedLane", values="Fraction").fillna(0)
-pivot_df = pivot_df[["Short", "Through"]]  # Ensure order
+fig, ax1 = plt.subplots(figsize=(14, 6))
+freq_df[["Short", "Through"]].plot(kind="bar", stacked=True, color=["blue", "red"], ax=ax1, alpha=0.6)
 
-pivot_df.plot(kind="bar", stacked=True, color=["blue", "red"], alpha=0.6, figsize=(14, 6))
-plt.title("Frequency of Blocked Lane Type vs Lane Usage Ratio")
-plt.xlabel(r"$\alpha / (1 - \alpha)$")
-plt.ylabel("Fraction of Blockages")
-plt.xticks(rotation=45)
-plt.legend(title="Blocked Lane")
-plt.grid(axis='y', linestyle='--', linewidth=0.5)
+ax1.set_ylabel("Fraction of Blockages")
+ax1.set_xlabel(r"$\alpha / (1 - \alpha)$")
+ax1.set_title("Blockage Frequency and Theoretical Probability vs Lane Usage Ratio")
+ax1.set_xticks(np.arange(len(ratios)))
+ax1.set_xticklabels([f"{r:.2f}" for r in ratios], rotation=45)
+ax1.grid(axis='y', linestyle='--', linewidth=0.5)
+ax1.legend(title="Blocked Lane", loc="upper left")
+
+ax2 = ax1.twinx()
+ax2.plot(np.arange(len(ratios)), one_minus_cdf, marker='o', linestyle='-', color='black', label='1 - CDF (Theory)')
+ax2.set_ylabel("1 - CDF (Theoretical Probability of Blockage)")
+ax2.legend(loc="upper right")
+
 plt.tight_layout()
 plt.savefig('blockage_frequency.png', dpi=300)
 plt.show()
 
-
-# === Plot 4: Violin plot for queue ratio ===
-# Define target alpha values for violin plot and compute their ratios
+# === Plot 4: Violin Plot ===
 target_alphas = np.round(np.arange(0.0, 1.01, 0.1), 2)
 target_ratios = [round(a / (1 - a), 2) if a < 1 else np.inf for a in target_alphas]
-
-# Step 2: Filter df_plot to include only those alpha ratios
 df_violin = df_plot[df_plot["AlphaRatio"].isin(target_ratios)].copy()
 
-# Step 3: Create violin plot
 plt.figure(figsize=(14, 6))
 sns.violinplot(
     data=df_violin,
@@ -268,7 +225,6 @@ sns.violinplot(
     palette={"Short": "blue", "Through": "orange"},
     inner="quartile"
 )
-
 plt.title("Queue Ratios by Blocked Lane (Selected α Values)")
 plt.xlabel(r"$\alpha / (1 - \alpha)$")
 plt.ylabel("Queue in Blocked Lane / N")
@@ -279,36 +235,22 @@ plt.tight_layout()
 plt.savefig("violin.png", dpi=300)
 plt.show()
 
-
-# === Plot 5: Scatter plot for the simulation ===
-# Count frequency of each (AlphaRatio, QueueRatio) pair
+# === Plot 5: Scatter (Bubble) Plot ===
 counts_df = df_plot.groupby(["AlphaRatio", "QueueRatio"]).size().reset_index(name="Count")
-
-# Normalize the count to control the size range
 counts_df["Size"] = counts_df["Count"] / counts_df["Count"].max() * 300
-counts_df["Size"] = counts_df["Size"].clip(lower=20)  # enforce visibility
+counts_df["Size"] = counts_df["Size"].clip(lower=20)
 
-# Mean line
 mean_line_df = df_plot.groupby("AlphaRatio")["QueueRatio"].mean().reset_index()
 
 plt.figure(figsize=(14, 6))
-
-# Bubble points
 plt.scatter(counts_df["AlphaRatio"], counts_df["QueueRatio"], s=counts_df["Size"],
             alpha=0.5, color="steelblue", edgecolors="gray", label='Simulation Results')
-
-# Mean line
 plt.plot(mean_line_df["AlphaRatio"], mean_line_df["QueueRatio"],
          color="darkred", marker='o', linestyle='-', linewidth=2, label="Mean Queue Ratio")
-
-# Reference curves
 x_vals_1 = np.linspace(0.01, 1, 100)
-plt.plot(x_vals_1, x_vals_1, color="green", linewidth=2, label="y = x (x ≤ 1)")
-
 x_vals_2 = np.linspace(1, 19, 200)
+plt.plot(x_vals_1, x_vals_1, color="green", linewidth=2, label="y = x (x ≤ 1)")
 plt.plot(x_vals_2, 1 / x_vals_2, color="green", linewidth=2, label="y = 1/x (x > 1)")
-
-# Axes and labels
 plt.title("Bubble Plot with Mean Queue Ratio and Reference Curves")
 plt.xlabel(r"$\alpha / (1 - \alpha)$")
 plt.ylabel("Queue in Blocked Lane / N")
@@ -320,21 +262,12 @@ plt.tight_layout()
 plt.savefig('scatter.png', dpi=300)
 plt.show()
 
-
 # === Plot 6: Blockage Probability ===
-blockage_prob = []
-for alpha in alphas:
-    if alpha == 1:
-        continue
-    ratio = round(alpha / (1 - alpha), 2)
-    df_all = event_based_simulation(simulations=simulation_runs, v=v, alpha=alpha, N=N, red=red, seed=42)
-    blockage_rate = df_all["BlockageOccurred"].mean()
-    blockage_prob.append({"AlphaRatio": ratio, "BlockageRate": blockage_rate})
-
-df_prob = pd.DataFrame(blockage_prob)
+blockage_prob_df = df_plot.groupby("AlphaRatio").size().reset_index(name="Blockages")
+blockage_prob_df["BlockageRate"] = blockage_prob_df["Blockages"] / simulation_runs
 
 plt.figure(figsize=(14, 6))
-sns.lineplot(data=df_prob, x="AlphaRatio", y="BlockageRate", marker="o", color="purple")
+sns.lineplot(data=blockage_prob_df, x="AlphaRatio", y="BlockageRate", marker="o", color="purple")
 plt.title("Blockage Probability vs Lane Usage Ratio")
 plt.xlabel(r"$\alpha / (1 - \alpha)$")
 plt.ylabel("Probability of Blockage Occurrence")
@@ -402,10 +335,9 @@ plt.show()
 
 # Plot sensitivity to short lane length
 
-alpha = 0.15
+alpha = 0.1
 N_values = range(2, 21)
 avg_queue_ratios = []
-alpha = 0.15
 v = 1800
 red = 36
 simulation_runs = 1000
@@ -421,9 +353,9 @@ for N in N_values:
     else:
         avg_queue_ratios.append(0)
 
-# Plot
 plt.figure(figsize=(10, 6))
 plt.plot(N_values, avg_queue_ratios, marker='o', linestyle='-', color='blue')
+plt.axhline(y=alpha/(1-alpha), color='r', linestyle='--', linewidth=2)
 plt.title('Average Queue/N for Blockage Cases (α = 0.15)')
 plt.xlabel('N (Queue Threshold)')
 plt.ylabel('Average Queue in Blocked Lane / N')
@@ -431,3 +363,5 @@ plt.grid(True, linestyle='--', linewidth=0.5)
 plt.tight_layout()
 plt.savefig('Sensitivity_to_Length.png', dpi=300)
 plt.show()
+
+
