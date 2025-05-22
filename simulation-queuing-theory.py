@@ -14,12 +14,13 @@ ratio_labels = [f"{r:.2f}" for r in ratios]
 
 # Constants
 N = 7
+b = 6
 v = 1800
 red = 36
 simulation_runs = 1000
 
 # Reusable Simulation
-def event_based_simulation(simulations=1000, v=1800, alpha=1/3, N=7, red=36, seed=None):
+def event_based_simulation(simulations=1000, v=1800, alpha=1/3, N=N, b=b, red=36, seed=None):
     if seed is not None:
         np.random.seed(seed)
     results = []
@@ -201,10 +202,7 @@ ax1.set_xticklabels([f"{r:.2f}" for r in ratios], rotation=45)
 ax1.grid(axis='y', linestyle='--', linewidth=0.5)
 ax1.legend(title="Blocked Lane", loc="upper left")
 
-ax2 = ax1.twinx()
-ax2.plot(np.arange(len(ratios)), one_minus_cdf, marker='o', linestyle='-', color='black', label='1 - CDF (Theory)')
-ax2.set_ylabel("1 - CDF (Theoretical Probability of Blockage)")
-ax2.legend(loc="upper right")
+ax1.plot(np.arange(len(ratios)), one_minus_cdf, linestyle='-', color='black', label='1 - CDF (Theory)')
 
 plt.tight_layout()
 plt.savefig('blockage_frequency.png', dpi=300)
