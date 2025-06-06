@@ -362,4 +362,42 @@ plt.tight_layout()
 plt.savefig('Sensitivity_to_Length.png', dpi=300)
 plt.show()
 
+N=7
+max_k = 7  # Truncation for summation
 
+# Store expected values
+expected_blocking_queues = []
+
+for alpha in alphas:
+    p_short = alpha
+    p_through = 1 - alpha
+
+    # Probabilities of each lane being blocked
+    prob_through_block = 1 - nbinom.cdf(N-1, N, p_through)
+    prob_short_block = 1 - nbinom.cdf(N-1, N, p_short)
+
+    # Expected queue in short lane when through lane is blocked
+    expected_short = 0
+    for k in range(max_k + 1):
+        prob_k = nbinom.pmf(k, N, p_short)
+        expected_short += k * prob_k
+
+    # Expected queue in through lane when short lane is blocked
+    expected_through = 0
+    for k in range(max_k + 1):
+        prob_k = nbinom.pmf(k, N, p_through)
+        expected_through += k * prob_k
+
+    # Weighted average expected blocking queue length
+    weighted_expected = prob_through_block * expected_short + prob_short_block * expected_through
+    expected_blocking_queues.append(weighted_expected)
+
+# Plot
+plt.figure(figsize=(12, 6))
+plt.plot(alphas, expected_blocking_queues, color='blue', marker='o', linestyle='-')
+plt.title("Expected Queue Length in Blocking Lane vs α (Lane Choice Probability)")
+plt.xlabel("α (Probability of Choosing Short Lane)")
+plt.ylabel("Expected Number of Vehicles in Blocking Lane")
+plt.grid(True, linestyle='--', linewidth=0.5)
+plt.tight_layout()
+plt.show()
