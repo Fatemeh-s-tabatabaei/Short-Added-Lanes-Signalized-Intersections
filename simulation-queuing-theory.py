@@ -373,7 +373,7 @@ for alpha in alphas:
     p_through = 1 - alpha
 
     # Expected queue in short lane when through lane blocks
-    weighted_expected = sum(k * (nbinom.pmf(k, N+1, p_short)+nbinom.pmf(k, N, p_through)) for k in range(max_k + 1))
+    weighted_expected = sum(k * (nbinom.pmf(k, N, p_short)+nbinom.pmf(k, N, p_through)) for k in range(max_k + 1))
 
     expected_blocking_queues.append(weighted_expected)
 
