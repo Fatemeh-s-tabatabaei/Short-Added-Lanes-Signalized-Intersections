@@ -362,38 +362,44 @@ plt.tight_layout()
 plt.savefig('Sensitivity_to_Length.png', dpi=300)
 plt.show()
 
-N = 7
-max_k = 7  # Truncation limit
+# Parameters
+Ns = range(1, 16)
+alphas = np.round(np.linspace(0.01, 0.51, 50), 3)
 
-# Store expected values
-expected_blocking_queues = []
+# Prepare figure with individual axes (no shared axes)
+fig, axes = plt.subplots(nrows=5, ncols=3, figsize=(15, 20), sharex=False, sharey=False)
+axes = axes.flatten()
 
-for alpha in alphas:
-    p_short = alpha
-    p_through = 1 - alpha
+# Plotting
+for idx, N in enumerate(Ns):
+    expected_blocking_queues = []
+    for alpha in alphas:
+        p_short = alpha
+        p_through = 1 - alpha
 
-    # Expected queue in short lane when through lane blocks
-    weighted_expected = sum(k * (nbinom.pmf(k, N, p_short)+nbinom.pmf(k, N, p_through)) for k in range(max_k + 1))
+        expected_val = sum(
+            k * (nbinom.pmf(k, N, p_short) + nbinom.pmf(k, N, p_through))
+            for k in range(N + 1)
+        )
+        expected_blocking_queues.append(expected_val)
 
-    expected_blocking_queues.append(weighted_expected)
+    alphas_line = np.linspace(0.01, 0.99, 500)
+    ref_y1 = N * alphas_line / (1 - alphas_line)
 
-# Reference lines
-alphas_line = np.linspace(0.01, 0.99, 500)
-ref_y1 = N * alphas_line / (1 - alphas_line)
-ref_y2 = N * (1 - alphas_line) / alphas_line
+    ax = axes[idx]
+    ax.plot(alphas, expected_blocking_queues, color='blue', linestyle='-', label='Expected Blocking Queue')
+    ax.plot(alphas_line[alphas_line <= 0.5], ref_y1[alphas_line <= 0.5], 'r--', label='Approx: Nα/(1-α)')
 
-# Plot
-plt.figure(figsize=(6, 6))
-plt.plot(alphas, expected_blocking_queues, color='blue', linestyle='-', label='Bonus Flow')
-plt.plot(alphas_line[alphas_line <= 0.5], ref_y1[alphas_line <= 0.5], 'r--', label='Bonus Flow Approximation')
-plt.plot(alphas_line[alphas_line >= 0.5], ref_y2[alphas_line >= 0.5], 'r--')
-plt.xlim(0, 0.5)
+    ax.set_title(f'N = {N}', fontsize=10)
+    ax.set_xlabel("α", fontsize=8)
+    ax.set_ylabel("E[Blocking Queue]", fontsize=8)
+    ax.tick_params(axis='both', which='major', labelsize=8)
+    ax.grid(True, linestyle='--', linewidth=0.5)
 
-plt.title("Bonus Flow vs. Lane Choice Probability (α) for N=7")
-plt.xlabel("α (Probability of Choosing Short Lane)")
-plt.ylabel("Expected Number of Vehicles in Blocking Lane")
-plt.legend()
-plt.grid(True, linestyle='--', linewidth=0.5)
-plt.tight_layout()
-plt.savefig('Expected Bonus Flow.png')
+# Remove extra blank axes if any
+for j in range(len(Ns), len(axes)):
+    fig.delaxes(axes[j])
+
+plt.subplots_adjust(wspace=0.3, hspace=0.5)
+plt.savefig('Expected_Bonus_Flow.png')
 plt.show()
