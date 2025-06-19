@@ -14,7 +14,7 @@ ratio_labels = [f"{r:.2f}" for r in ratios]
 
 # Constants
 N = 7
-b = 6
+b = 7
 v = 1800
 red = 36
 simulation_runs = 1000
@@ -154,7 +154,7 @@ for patch, color in zip(box['boxes'], plot_colors):
 xtick_positions = list(range(len(x_labels)))
 plt.xticks(xtick_positions, x_labels, rotation=45)
 plt.axhline(1, color='gray', linestyle='--')
-plt.xlabel(r'$\alpha / (1 - \alpha)$')
+plt.xlabel(r'$\alpha/(1-\alpha)$')
 plt.ylabel('Queue in Blocked Lane / N')
 plt.title('Queue Ratio by Blocked Lane Type for Each Lane Usage Ratio')
 plt.grid(True, linestyle='--', linewidth=0.5)
@@ -195,10 +195,12 @@ fig, ax1 = plt.subplots(figsize=(14, 6))
 freq_df[["Short", "Through"]].plot(kind="bar", stacked=True, color=["blue", "red"], ax=ax1, alpha=0.6)
 
 ax1.set_ylabel("Fraction of Blockages")
-ax1.set_xlabel(r"$\alpha / (1 - \alpha)$")
+ax1.set_xlabel(r"$\alpha$")
+# plt.axhline(0.05, color='black', linestyle='--')
+# plt.axhline(0.95, color='black', linestyle='--')
 ax1.set_title("Blockage Frequency and Theoretical Probability vs Lane Usage Ratio")
 ax1.set_xticks(np.arange(len(ratios)))
-ax1.set_xticklabels([f"{r:.2f}" for r in ratios], rotation=45)
+ax1.set_xticklabels([f"{r:.2f}" for r in alphas], rotation=45)
 ax1.grid(axis='y', linestyle='--', linewidth=0.5)
 ax1.legend(title="Blocked Lane", loc="upper left")
 
@@ -362,44 +364,42 @@ plt.tight_layout()
 plt.savefig('Sensitivity_to_Length.png', dpi=300)
 plt.show()
 
-# Parameters
-Ns = range(1, 16)
-alphas = np.round(np.linspace(0.01, 0.51, 50), 3)
+# Define parameter ranges
+Ns = range(1, 21)
+alphas = np.round(np.linspace(0.01, 0.51, 200), 3)
 
-# Prepare figure with individual axes (no shared axes)
-fig, axes = plt.subplots(nrows=5, ncols=3, figsize=(15, 20), sharex=False, sharey=False)
-axes = axes.flatten()
+# Store alpha thresholds
+alpha_thresholds = []
 
-# Plotting
-for idx, N in enumerate(Ns):
-    expected_blocking_queues = []
+# Iterate over each N
+for N in Ns:
+    threshold_alpha = None
     for alpha in alphas:
         p_short = alpha
         p_through = 1 - alpha
 
         expected_val = sum(
-            k * (nbinom.pmf(k, N, p_short) + nbinom.pmf(k, N, p_through))
-            for k in range(N + 1)
+            k * (nbinom.pmf(k, N-1, p_short) + nbinom.pmf(k, N, p_through))
+            for k in range(N)
         )
-        expected_blocking_queues.append(expected_val)
+        ref_val = N * alpha / (1 - alpha)
+        diff = abs(ref_val - expected_val)
 
-    alphas_line = np.linspace(0.01, 0.99, 500)
-    ref_y1 = N * alphas_line / (1 - alphas_line)
+        if diff > 0.5:
+            threshold_alpha = alpha
+            break
 
-    ax = axes[idx]
-    ax.plot(alphas, expected_blocking_queues, color='blue', linestyle='-', label='Expected Blocking Queue')
-    ax.plot(alphas_line[alphas_line <= 0.5], ref_y1[alphas_line <= 0.5], 'r--', label='Approx: Nα/(1-α)')
+    alpha_thresholds.append(threshold_alpha if threshold_alpha else np.nan)
 
-    ax.set_title(f'N = {N}', fontsize=10)
-    ax.set_xlabel("α", fontsize=8)
-    ax.set_ylabel("E[Blocking Queue]", fontsize=8)
-    ax.tick_params(axis='both', which='major', labelsize=8)
-    ax.grid(True, linestyle='--', linewidth=0.5)
-
-# Remove extra blank axes if any
-for j in range(len(Ns), len(axes)):
-    fig.delaxes(axes[j])
-
-plt.subplots_adjust(wspace=0.3, hspace=0.5)
-plt.savefig('Expected_Bonus_Flow.png')
+# Plot
+plt.figure(figsize=(5, 3))
+plt.plot(Ns, alpha_thresholds, linestyle='-', color='blue')
+plt.xlabel("N (Short Lane Capacity)")
+plt.ylabel(r"Acceptable Short Lane Utilization ($\alpha$)")
+# plt.title("Lane Utilization Threshold Where Approximation Error Exceeds 0.5 Vehicles")
+plt.minorticks_on()
+plt.grid(which='major', linestyle='-', linewidth='0.8', color='gray')
+plt.grid(which='minor', linestyle=':', linewidth='0.5', color='lightgray')
+plt.tight_layout()
+plt.savefig('AlphaThreshold.png')
 plt.show()

@@ -124,6 +124,12 @@ df_two_short
 df_two_short["AlphaRatio"] = round(0.13 / (1 - 0.13 - 0.32), 2)
 
 # Prepare melted data for queue ratios
+df_two_short["BlockedLane"] = df_two_short["BlockedLane"].map({
+    "short1": "Auxiliary Lane",
+    "short2": "RT Lane",
+    "through": "Continuous Lane"
+})
+
 df_melted = pd.melt(
     df_two_short,
     id_vars=["BlockedLane", "AlphaRatio"],
@@ -135,10 +141,11 @@ df_melted = pd.melt(
 # Normalize queue by N
 df_melted["QueueRatio"] = df_melted["Queue"] / 7
 df_melted["Lane"] = df_melted["Lane"].map({
-    "Q_short1": "Short1",
-    "Q_short2": "Short2",
-    "Q_through": "Through"
+    "Q_short1": "Auxiliary Lane",
+    "Q_short2": "RT Lane",
+    "Q_through": "Continuous Lane"
 })
+
 
 # === Boxplot by lane type ===
 plt.figure(figsize=(10, 6))
@@ -154,7 +161,7 @@ plt.show()
 
 # === Frequency bar plot of blocking lanes ===
 plt.figure(figsize=(8, 6))
-sns.countplot(data=df_two_short, x="BlockedLane", palette={"short1": "blue", "short2": "orange", "through": "red"})
+sns.countplot(data=df_two_short, x="BlockedLane", palette={"Auxiliary Lane": "blue", "RT Lane": "orange", "Continuous Lane": "red"})
 plt.title("Frequency of Blocking Lane")
 plt.ylabel("Count")
 plt.xlabel("Blocking Lane")
@@ -169,7 +176,7 @@ plt.figure(figsize=(14, 6))
 sns.violinplot(
     data=df_melted,
     x="BlockingLane", y="QueueRatio", hue="Lane",
-    palette={"Short1": "blue", "Short2": "orange", "Through": "red"},
+    palette={"Auxiliary Lane": "blue", "RT Lane": "orange", "Continuous Lane": "red"},
     split=False
 )
 plt.title("Queue Ratio in All Lanes Grouped by Blocking Lane")
