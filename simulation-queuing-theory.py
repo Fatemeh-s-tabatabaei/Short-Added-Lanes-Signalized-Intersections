@@ -364,42 +364,78 @@ plt.tight_layout()
 plt.savefig('Sensitivity_to_Length.png', dpi=300)
 plt.show()
 
+from scipy.interpolate import make_interp_spline, BSpline
+
 # Define parameter ranges
-Ns = range(1, 21)
+Ns = list(range(1, 21))
 alphas = np.round(np.linspace(0.01, 0.51, 200), 3)
 
 # Store alpha thresholds
 alpha_thresholds = []
 
-# Iterate over each N
 for N in Ns:
     threshold_alpha = None
     for alpha in alphas:
         p_short = alpha
         p_through = 1 - alpha
-
         expected_val = sum(
-            k * (nbinom.pmf(k, N-1, p_short) + nbinom.pmf(k, N, p_through))
-            for k in range(N)
+            k * (nbinom.pmf(k, N, p_short) + nbinom.pmf(k, N+1, p_through))
+            for k in range(N+1)
         )
-        ref_val = N * alpha / (1 - alpha)
-        diff = abs(ref_val - expected_val)
-
-        if diff > 0.5:
+        ref_val = (N+1) * alpha / (1 - alpha)
+        if abs(ref_val - expected_val) > 0.5:
             threshold_alpha = alpha
             break
+    alpha_thresholds.append(threshold_alpha)
 
-    alpha_thresholds.append(threshold_alpha if threshold_alpha else np.nan)
+# === Filter NaNs ===
+Ns_filtered = [n for n, a in zip(Ns, alpha_thresholds) if a is not None]
+alphas_filtered = [a for a in alpha_thresholds if a is not None]
+
+# Interpolate
+N_new = np.linspace(min(Ns_filtered), max(Ns_filtered), 200)
+spl = make_interp_spline(Ns_filtered, alphas_filtered, k=3)
+smooth_values = spl(N_new)
 
 # Plot
-plt.figure(figsize=(5, 3))
-plt.plot(Ns, alpha_thresholds, linestyle='-', color='blue')
-plt.xlabel("N (Short Lane Capacity)")
-plt.ylabel(r"Acceptable Short Lane Utilization ($\alpha$)")
-# plt.title("Lane Utilization Threshold Where Approximation Error Exceeds 0.5 Vehicles")
-plt.minorticks_on()
-plt.grid(which='major', linestyle='-', linewidth='0.8', color='gray')
-plt.grid(which='minor', linestyle=':', linewidth='0.5', color='lightgray')
+plt.figure(figsize=(6, 4))
+plt.plot(N_new, smooth_values, label="Smoothed Threshold", color='blue')
+plt.plot(Ns_filtered, alphas_filtered, 'o', color='black', markersize=4, label="Threshold α")
+plt.fill_between(N_new, 0, smooth_values, color='lightgray', alpha=0.4, label="Acceptable Region")
+plt.xlabel("N_cont (bottleneck distance)")
+plt.ylabel("short lanes preference")
+plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+plt.legend()
 plt.tight_layout()
+plt.savefig("Smoothed_Thresholds.png", dpi=300)
+plt.show()
+
+from scipy.optimize import curve_fit
+
+# Define a fitting function, e.g., exponential saturation form
+def fit_func(N, a, b, c):
+    return a * (1 - np.exp(-b * (N - c)))
+
+# Fit curve to data
+popt, _ = curve_fit(fit_func, Ns[1:], alpha_thresholds[1:])
+
+# Generate smooth curve
+N_fine = np.linspace(1, 20, 200)
+alpha_fit = fit_func(N_fine, *popt)
+
+# Plot
+plt.rcParams['font.family'] = 'Serif'
+plt.figure(figsize=(6, 4))
+plt.plot(N_fine, alpha_fit, '-', color='blue')
+plt.fill_between(N_fine, 0, alpha_fit, color="#84b2bd", alpha=0.4, label='Acceptable Region')
+plt.xlabel(r"$N_{cont}$ (Bottleneck Distance)")
+plt.ylabel(r"Short Lanes Preference ($\alpha_o$)")
+plt.ylim(0.34, 0.44)
+plt.xticks(np.arange(int(N_fine.min()), int(N_fine.max()) + 1, 1))  # Force integer ticks on x-axis
+plt.minorticks_on()
+plt.grid(which='minor', linestyle=':', linewidth='0.3', color='black')
+plt.grid(which='major', linestyle='-', linewidth='0.5', color='gray')
+plt.legend()
 plt.savefig('AlphaThreshold.png')
+plt.tight_layout()
 plt.show()
