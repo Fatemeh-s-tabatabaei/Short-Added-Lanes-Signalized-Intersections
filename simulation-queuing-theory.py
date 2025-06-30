@@ -379,7 +379,7 @@ for N in Ns:
         p_short = alpha
         p_through = 1 - alpha
         expected_val = sum(
-            k * (nbinom.pmf(k, N, p_short) + nbinom.pmf(k, N+1, p_through))
+            k * (nbinom.pmf(k, N+1, p_short) + nbinom.pmf(k, N+1, p_through))
             for k in range(N+1)
         )
         ref_val = (N+1) * alpha / (1 - alpha)
@@ -427,15 +427,21 @@ alpha_fit = fit_func(N_fine, *popt)
 plt.rcParams['font.family'] = 'Serif'
 plt.figure(figsize=(6, 4))
 plt.plot(N_fine, alpha_fit, '-', color='blue')
-plt.fill_between(N_fine, 0, alpha_fit, color="#84b2bd", alpha=0.4, label='Acceptable Region')
+plt.fill_between(N_fine, 0, alpha_fit, color="#84b2bd", alpha=0.4)
+
+# Add embedded text label on shaded area
+x_text = 4  # X-position of text (adjust as needed)
+y_text = 0.32  # Y-position of text (adjust as needed)
+plt.text(x_text, y_text, "Region in which Equation 1 \n is an acceptable approximation", fontsize=14, fontweight='bold', color='black')
+
+# Axis labels and ticks
 plt.xlabel(r"$N_{cont}$ (Bottleneck Distance)")
-plt.ylabel(r"Short Lanes Preference ($\alpha_o$)")
-plt.ylim(0.34, 0.44)
-plt.xticks(np.arange(int(N_fine.min()), int(N_fine.max()) + 1, 1))  # Force integer ticks on x-axis
+plt.ylabel(r"Short Lane Preference ($p_i/p_{cont}$)")
+plt.ylim(0.30, 0.40)
+plt.xticks(np.arange(int(N_fine.min()), int(N_fine.max()) + 1, 1))
 plt.minorticks_on()
 plt.grid(which='minor', linestyle=':', linewidth='0.3', color='black')
 plt.grid(which='major', linestyle='-', linewidth='0.5', color='gray')
-plt.legend()
-plt.savefig('AlphaThreshold.png')
 plt.tight_layout()
+plt.savefig('AlphaThreshold.png')
 plt.show()
